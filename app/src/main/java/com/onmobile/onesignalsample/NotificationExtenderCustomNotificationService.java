@@ -1,12 +1,15 @@
 package com.onmobile.onesignalsample;
 
+import android.app.ActivityManager;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.media.RingtoneManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.IBinder;
 import android.support.v4.app.NotificationCompat;
 import android.util.Log;
@@ -18,6 +21,8 @@ import com.onesignal.OSNotificationPayload;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.util.List;
+
 public class NotificationExtenderCustomNotificationService extends NotificationExtenderService {
 
     public NotificationExtenderCustomNotificationService() {
@@ -27,17 +32,33 @@ public class NotificationExtenderCustomNotificationService extends NotificationE
     @Override
     protected boolean onNotificationProcessing(OSNotificationPayload notification) {
         Log.e("onNotificationProcessing","called");
+        boolean isAppInBackground = isAppIsInBackground(getApplicationContext());
 
         if(notification.backgroundData){
             JSONObject json = notification.additionalData;
+            String jsonStr = null;
             try {
                 if(json != null){
-                    String str = json.getString("pk");
-                    Log.e("additional data :- ", str );
+                    jsonStr = json.getString("pk");
+                    Log.e("additional data :- ", jsonStr );
                 }
             } catch (JSONException e) {
                 e.printStackTrace();
             }
+
+            String title = notification.title;
+            String description = notification.message;
+
+            JSONObject jsonObject = null;
+            try {
+                jsonObject = new JSONObject(jsonStr);
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
+            String action = jsonObject.optString("Action");
+            String contentType = jsonObject.optString("Content_Type");
+            String contentId = jsonObject.optString("Content_Id");
+
             OverrideSettings overrideSettings = new OverrideSettings();
             overrideSettings.extender = new NotificationCompat.Extender() {
              // Apply this extender to a notification builder.
@@ -71,6 +92,37 @@ public class NotificationExtenderCustomNotificationService extends NotificationE
         }
 
         sendNotification(title,message);*/
+    }
+
+    /**
+     * Method checks if the app is in background or not
+     *
+     * @param context
+     * @return
+     */
+    public static boolean isAppIsInBackground(Context context) {
+        boolean isInBackground = true;
+        ActivityManager am = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.KITKAT_WATCH) {
+            List<ActivityManager.RunningAppProcessInfo> runningProcesses = am.getRunningAppProcesses();
+            for (ActivityManager.RunningAppProcessInfo processInfo : runningProcesses) {
+                if (processInfo.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND) {
+                    for (String activeProcess : processInfo.pkgList) {
+                        if (activeProcess.equals(context.getPackageName())) {
+                            isInBackground = false;
+                        }
+                    }
+                }
+            }
+        } else {
+            List<ActivityManager.RunningTaskInfo> taskInfo = am.getRunningTasks(1);
+            ComponentName componentInfo = taskInfo.get(0).topActivity;
+            if (componentInfo.getPackageName().equals(context.getPackageName())) {
+                isInBackground = false;
+            }
+        }
+
+        return isInBackground;
     }
 
     private void sendNotification(String title,String messageBody) {
